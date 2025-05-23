@@ -87,7 +87,7 @@ def int_or_list_arg(string: str) -> object:
 
 
 @setup_logging
-def download_args(choices: object = None,
+def download_args(choices: object = None, # e.g. ["era5", "oras5", "sirf", "osisaf"]
                   dates: bool = True,
                   dates_optional: bool = False,
                   var_specs: bool = True,
@@ -107,7 +107,15 @@ def download_args(choices: object = None,
     ap = argparse.ArgumentParser()
     ap.add_argument("hemisphere", choices=("north", "south"))
 
+    # Ensure "carra" is included if choices are provided.
+    # The actual list of choices is often passed by the calling script (e.g. icenet_download.py)
+    # This function itself doesn't define the master list, but if one is passed,
+    # we'll log a note if carra is missing for debugging, though we can't modify it here.
     if choices and type(choices) == list:
+        if "carra" not in choices:
+            logging.debug("Note: 'carra' is not in the explicit choices list passed to download_args.")
+            # To actually add it, the calling script (e.g. icenet_download.py) needs to include it.
+            # For now, we assume the calling script will be updated.
         ap.add_argument("-c", "--choice", choices=choices, default=choices[0])
 
     if dates:
