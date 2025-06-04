@@ -41,6 +41,7 @@ setup(
 
             "icenet_data_cmip = icenet.data.interfaces.esgf:main",
             "icenet_data_era5 = icenet.data.interfaces.cds:main",
+            "icenet_data_carra = icenet.data.interfaces.carra:main",
             "icenet_data_oras5 = icenet.data.interfaces.cmems:main",
             "icenet_data_hres = icenet.data.interfaces.mars:hres_main",
             "icenet_data_seas = icenet.data.interfaces.mars:seas_main",

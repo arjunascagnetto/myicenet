@@ -146,6 +146,7 @@ class ClimateDownloader(Downloader):
                  pregrid_prefix: str = "latlon_",
                  var_name_idx: int = -1,
                  var_names: object = (),
+                 ease_resolution: float = 25.0,
                  **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -164,6 +165,7 @@ class ClimateDownloader(Downloader):
         self._sic_ease_cubes = dict()
         self._var_name_idx = var_name_idx
         self._var_names = list(var_names)
+        self._ease_resolution = ease_resolution
 
         assert len(self._var_names), "No variables requested"
         assert len(self._levels) == len(self._var_names), \
@@ -304,6 +306,11 @@ class ClimateDownloader(Downloader):
         if os.path.exists(latlon_path):
             self._files_downloaded.append(latlon_path)
 
+    @property
+    def ease_resolution(self):
+        """Resolution of the target EASE grid in kilometres."""
+        return self._ease_resolution
+
     def postprocess(self, var, download_path):
         logging.debug("No postprocessing in place for {}: {}".format(
             var, download_path))
@@ -357,15 +364,49 @@ class ClimateDownloader(Downloader):
 
             # Load a single SIC map to obtain the EASE grid for
             # regridding ERA data
-            self._sic_ease_cubes[self._hemisphere] = \
-                iris.load_cube(sic_day_path, 'sea_ice_area_fraction')
+            base_cube = iris.load_cube(sic_day_path, 'sea_ice_area_fraction')
 
-            # Convert EASE coord units to metres for regridding
-            self._sic_ease_cubes[self._hemisphere].coord(
+            base_cube.coord(
                 'projection_x_coordinate').convert_units('meters')
-            self._sic_ease_cubes[self._hemisphere].coord(
+            base_cube.coord(
                 'projection_y_coordinate').convert_units('meters')
+
+            if self._ease_resolution != 25:
+                base_cube = self._resample_ease_cube(base_cube)
+
+            self._sic_ease_cubes[self._hemisphere] = base_cube
         return self._sic_ease_cubes[self._hemisphere]
+
+    def _resample_ease_cube(self, cube):
+        x_coord = cube.coord('projection_x_coordinate')
+        y_coord = cube.coord('projection_y_coordinate')
+        step = self._ease_resolution * 1000.0
+        x_min, x_max = x_coord.points[0], x_coord.points[-1]
+        y_min, y_max = y_coord.points[0], y_coord.points[-1]
+        x_points = np.arange(x_min, x_max + step, step)
+        y_points = np.arange(y_min, y_max + step, step)
+        new_x = iris.coords.DimCoord(
+            x_points,
+            standard_name=x_coord.standard_name,
+            units=x_coord.units,
+            coord_system=x_coord.coord_system,
+            var_name=x_coord.var_name,
+            long_name=x_coord.long_name,
+        )
+        new_y = iris.coords.DimCoord(
+            y_points,
+            standard_name=y_coord.standard_name,
+            units=y_coord.units,
+            coord_system=y_coord.coord_system,
+            var_name=y_coord.var_name,
+            long_name=y_coord.long_name,
+        )
+        template = iris.cube.Cube(
+            np.zeros((len(y_points), len(x_points))),
+            dim_coords_and_dims=[(new_y, 0), (new_x, 1)],
+            attributes=cube.attributes,
+        )
+        return cube.regrid(template, iris.analysis.Linear())
 
     def regrid(self, files: object = None, rotate_wind: bool = True):
         """
